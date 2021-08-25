@@ -1,5 +1,6 @@
 /img-crops*
-/img-test
+/img-test*
+img*.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
