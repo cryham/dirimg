@@ -13,23 +13,25 @@ recursive = True
 
 
 data = Path(os.path.realpath(__file__)).parent
-crop_dir = os.path.join(data,'img-crops')
+crop_dir = os.path.join(data, 'img-crops')
 
 
 print('Path: ' + start_dir)
 print('---------------------------------------------')
-
+prevImgGr = None
 
 class Crop:
 	rect = (0,0,1,1)  # crop rect
+	grect = None  # group hash rect
 	cimg = 0
 	subdir = 'a'  # moves img inside, if crop matches
 	moved = 0
 
-	def __init__(self, x1,y1,x2,y2, fname, subdir):
+	def __init__(self, rect, fname, subdir, groupRect):
 		try:
 			fpath = os.path.join(crop_dir, fname)
-			self.rect = (x1,y1,x2,y2)
+			self.rect = rect
+			self.grect = groupRect
 			self.subdir = subdir
 			cimg = Image.open(fpath)
 			self.cimg = cimg.crop(self.rect)
@@ -37,31 +39,37 @@ class Crop:
 			print(fpath + ' ' + str(ex))
 			exit(1)
 	
-	def check(self, img, fpath):
-		move = False
-
-		crimg = img.crop(self.rect)
-		diff = ImageChops.difference(crimg, self.cimg)
+	def imgDiff(self, img, rect, cimg):
+		#  return if img crop different
+		crimg = img.crop(rect)
+		diff = ImageChops.difference(crimg, cimg)
 		if diff.getbbox():
 			stat = ImageStat.Stat(diff)
 			ratio = sum(stat.mean) / (len(stat.mean) * 255) * 100
 
 			#print(self.subdir + '  {:.2f} %  '.format(ratio) + fpath)
-			move = ratio < 1.0
+			return ratio < 1.0
 		else:
-			move = True
+			return True
+
+	def moveto(self, fpath):
+		path = Path(fpath)
+		file = path.parts[-1]
+		new_path = os.path.join(path.parent, self.subdir)
+		
+		if not os.path.exists(new_path):
+			os.mkdir(new_path)
+		shutil.move(fpath, new_path)
+		self.moved += 1
+
+	def check(self, img, fpath):
+		move = self.imgDiff(img, self.rect, self.cimg)
 		
 		if move:
 			#  match, move into subdir
 			#  add subdir to path
-			path = Path(fpath)
-			file = path.parts[-1]
-			new_path = os.path.join(path.parent, self.subdir)
-			
-			if not os.path.exists(new_path):
-				os.mkdir(new_path)
-			shutil.move(fpath, new_path)
-			self.moved += 1
+
+			self.moveto(fpath)
 		return move
 
 
@@ -69,8 +77,8 @@ class Crops:
 	all = list()  # all Crop images
 	moved = 0
 
-	def add(self, x1,y1,x2,y2, fname, subdir):
-		self.all.append(Crop(x1,y1,x2,y2, fname, subdir))
+	def add(self, rect, fname, subdir, grect=None):
+		self.all.append(Crop(rect, fname, subdir, grect))
 
 	#  check if subdir is in crops, from previous run
 	def pathChk(self, fpath):
